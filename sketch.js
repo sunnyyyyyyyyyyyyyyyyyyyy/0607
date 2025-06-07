@@ -1,152 +1,200 @@
+let canvas;
 let video;
-let handpose;
-let predictions = [];
-let isStarted = false;
+let detections = [];
 
-let currentCourses = [];
-let courseIndex = 0;
-let showMessage = '';
-let messageTimer = 0;
-
-// 所有課程
-let allCourses = [
-  // 大一課程
-  { name: "教育科技概論", desc: "介紹教育科技的基礎概念與發展" },
-  { name: "AI與程式語言", desc: "學習基礎AI與程式語言應用" },
-  { name: "數位音訊編輯", desc: "學習音訊編輯技術與實務" },
-  { name: "平面設計", desc: "學習設計原理與應用軟體操作" },
-  { name: "教學原理與策略", desc: "理解教學設計理論與實務" },
-  // 大二課程
-  { name: "需求分析", desc: "學習分析使用者需求與設計流程" },
-  { name: "介面設計", desc: "設計人因導向的教育介面" },
-  { name: "2D動畫製作", desc: "學習動畫基礎與製作技巧" },
-  { name: "教育統計概論", desc: "理解統計基本概念與應用" },
-  // 大三課程
-  { name: "互動教材設計", desc: "開發與測試互動型教材" },
-  { name: "人力資源發展", desc: "探索組織內部的人才培育方法" },
-  { name: "數位學習導入", desc: "導入數位學習系統與經營方式" },
-  // 大四課程
-  { name: "課程發展與評鑑", desc: "設計並評估有效課程" },
-  { name: "畢業專題", desc: "完成個人或團隊的專題製作" }
-];
+let blocks = [];
+let targetWords = ["教", "育", "科", "技"];
+let caughtWords = [];
+let timer = 30;
+let gameOver = false;
+let gameSuccess = false;
+let restartTimer = 0;
+let lastBlockTime = 0;
 
 function setup() {
-  createCanvas(640, 480);
-  let btn = document.getElementById('startBtn');
-  btn.addEventListener('click', startGame);
-  textFont('sans-serif');
-  textSize(20);
-  textAlign(CENTER, CENTER);
-}
-
-function startGame() {
-  if (isStarted) return;
+  canvas = createCanvas(640, 480);
+  canvas.parent(document.body);
 
   video = createCapture(VIDEO);
   video.size(width, height);
   video.hide();
 
-  handpose = ml5.handpose(video, () => {
-    console.log("✔ Handpose模型載入完成");
-  });
+  setupHandTracking();
 
-  handpose.on("predict", results => {
-    predictions = results;
-  });
-
-  isStarted = true;
-  nextCourses();
-
-  let btn = document.getElementById('startBtn');
-  btn.disabled = true;
-  btn.innerText = '偵測中...';
+  textAlign(CENTER, CENTER);
+  rectMode(CENTER);
 }
 
 function draw() {
-  background(30);
+  background(255);
 
-  if (isStarted && video) {
-    // 畫鏡像攝影畫面
-    push();
-    translate(width, 0);
-    scale(-1, 1);
-    image(video, 0, 0, width, height);
-    pop();
+  // 翻轉鏡頭畫面
+  push();
+  translate(width, 0);
+  scale(-1, 1);
+  image(video, 0, 0, width, height);
+  pop();
 
-    drawCourses();
-    drawHands();
-
-    if (messageTimer > 0) {
-      fill(255, 255, 0);
-      textSize(24);
-      text(showMessage, width / 2, height - 30);
-      messageTimer--;
-    }
+  drawTimer();
+  if (!gameOver && !gameSuccess) {
+    drawBlocks();
+    checkGameStatus();
+    spawnBlocks();
   } else {
-    fill(255);
-    text("請點「開始」以啟動遊戲", width / 2, height / 2);
+    drawResult();
+    restartTimer--;
+    if (restartTimer <= 0) {
+      restartGame();
+    }
   }
 }
 
-// 隨機選出 3 個課程
-function nextCourses() {
-  currentCourses = [];
-  let pool = [...allCourses];
-  for (let i = 0; i < 3; i++) {
-    let idx = floor(random(pool.length));
-    currentCourses.push(pool.splice(idx, 1)[0]);
+function setupHandTracking() {
+  const hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+  });
+
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.8,
+    minTrackingConfidence: 0.5,
+  });
+
+  hands.onResults(results => {
+    detections = results.multiHandLandmarks;
+  });
+
+  const camera = new Camera(video.elt, {
+    onFrame: async () => {
+      await hands.send({ image: video.elt });
+    },
+    width: 640,
+    height: 480,
+  });
+  camera.start();
+}
+
+function drawHand() {
+  if (detections.length > 0) {
+    let landmarks = detections[0];
+    let thumbTip = landmarks[4];
+    let indexTip = landmarks[8];
+
+    let x1 = width - thumbTip.x * width;
+    let y1 = thumbTip.y * height;
+    let x2 = width - indexTip.x * width;
+    let y2 = indexTip.y * height;
+
+    stroke(0, 255, 0);
+    strokeWeight(4);
+    line(x1, y1, x2, y2);
+
+    return { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+  }
+  return null;
+}
+
+function spawnBlocks() {
+  if (millis() - lastBlockTime > 1000) {
+    lastBlockTime = millis();
+
+    let r = random();
+    let newBlock = {
+      x: random(50, width - 50),
+      y: -40,
+      text: "",
+      type: "normal",
+      caught: false
+    };
+
+    if (r < 0.2) {
+      newBlock.text = "+5秒";
+      newBlock.type = "timePlus";
+      newBlock.value = 5;
+    } else if (r < 0.3) {
+      newBlock.text = "+10秒";
+      newBlock.type = "timePlus";
+      newBlock.value = 10;
+    } else if (r < 0.35) {
+      newBlock.text = "+15秒";
+      newBlock.type = "timePlus";
+      newBlock.value = 15;
+    } else if (r < 0.45) {
+      newBlock.text = "-3秒";
+      newBlock.type = "timeMinus";
+      newBlock.value = -3;
+    } else {
+      newBlock.text = random(targetWords);
+      newBlock.type = "target";
+    }
+
+    blocks.push(newBlock);
   }
 }
 
-// 畫課程卡片
-function drawCourses() {
-  let w = 180;
-  let h = 100;
-  let margin = 40;
+function drawBlocks() {
+  let handPos = drawHand();
 
-  for (let i = 0; i < currentCourses.length; i++) {
-    let x = margin + i * (w + margin);
-    let y = 100;
+  for (let block of blocks) {
+    if (!block.caught) {
+      block.y += 2;
 
-    fill(255, 100);
-    stroke(255);
-    rect(x, y, w, h, 12);
+      fill(200, 100, 100);
+      rect(block.x, block.y, 60, 40, 5);
+      fill(255);
+      textSize(18);
+      text(block.text, block.x, block.y);
 
-    fill(255);
-    noStroke();
-    textSize(16);
-    text(currentCourses[i].name, x + w / 2, y + h / 2);
-  }
-}
-
-// 偵測食指觸碰卡片
-function drawHands() {
-  if (predictions.length > 0) {
-    let hand = predictions[0];
-    let index = hand.landmarks[8]; // 食指指尖
-
-    // 鏡像
-    let x = width - index[0];
-    let y = index[1];
-
-    fill(0, 255, 0);
-    noStroke();
-    ellipse(x, y, 15, 15);
-
-    // 檢查是否點中課程卡
-    let w = 180;
-    let h = 100;
-    let margin = 40;
-
-    for (let i = 0; i < currentCourses.length; i++) {
-      let cx = margin + i * (w + margin);
-      let cy = 100;
-      if (x > cx && x < cx + w && y > cy && y < cy + h) {
-        showMessage = currentCourses[i].desc;
-        messageTimer = 100;
-        nextCourses();
-        break;
+      if (handPos && dist(handPos.x, handPos.y, block.x, block.y) < 40) {
+        block.caught = true;
+        if (block.type === "timePlus") {
+          timer += block.value;
+        } else if (block.type === "timeMinus") {
+          timer += block.value;
+        } else if (block.type === "target" && !caughtWords.includes(block.text)) {
+          caughtWords.push(block.text);
+        }
       }
     }
   }
+}
+
+function drawTimer() {
+  fill(0);
+  textSize(20);
+  text("剩餘時間: " + timer.toFixed(1), width / 2, 30);
+  if (!gameOver && !gameSuccess) {
+    timer -= deltaTime / 1000;
+  }
+}
+
+function checkGameStatus() {
+  if (timer <= 0) {
+    gameOver = true;
+    restartTimer = 300;
+  }
+  if (targetWords.every(word => caughtWords.includes(word))) {
+    gameSuccess = true;
+    restartTimer = 300;
+  }
+}
+
+function drawResult() {
+  textSize(32);
+  if (gameSuccess) {
+    fill(0, 200, 0);
+    text("挑戰成功！", width / 2, height / 2);
+  } else if (gameOver) {
+    fill(200, 0, 0);
+    text("挑戰失敗", width / 2, height / 2);
+  }
+}
+
+function restartGame() {
+  blocks = [];
+  caughtWords = [];
+  timer = 30;
+  gameOver = false;
+  gameSuccess = false;
 }
