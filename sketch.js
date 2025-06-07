@@ -1,31 +1,35 @@
 let video;
 let faceapi;
 let detections = [];
-let gameStarted = false;
-let currentQuestion = 0;
+
 let questions = [
-  { text: "大一必修課：哪一門課教AI與程式語言？", answer: "AI與程式語言" },
-  { text: "大二必修課：哪門課需要進行教學設計？", answer: "教學設計" },
-  { text: "大三必修課：與教材互動有關的是？", answer: "互動教材設計與實習" },
-  { text: "大四：課程評鑑與設計是哪門課？", answer: "課程發展與評鑑" }
+  {
+    question: "大一會學到哪一門課？",
+    options: ["2D動畫設計", "需求分析", "教育心理學"],
+    answer: "教育心理學"
+  },
+  {
+    question: "大三會學到哪一門課？",
+    options: ["未來學習與AI", "互動教材設計", "平面設計"],
+    answer: "互動教材設計"
+  }
 ];
-let userInput = "";
+
+let currentQuestion = 0;
+let gameState = "start";
 
 function setup() {
-  createCanvas(800, 600);
+  createCanvas(640, 480);
   video = createCapture(VIDEO);
-  video.size(800, 600);
+  video.size(width, height);
   video.hide();
 
-  let faceOptions = {
-    withLandmarks: false,
-    withDescriptors: false,
-  };
+  const faceOptions = { withLandmarks: true, withExpressions: false, withDescriptors: false };
   faceapi = ml5.faceApi(video, faceOptions, modelReady);
 }
 
 function modelReady() {
-  console.log("FaceAPI Ready!");
+  console.log("FaceAPI loaded!");
   faceapi.detect(gotResults);
 }
 
@@ -34,61 +38,83 @@ function gotResults(err, result) {
     console.error(err);
     return;
   }
+
   detections = result;
-  faceapi.detect(gotResults);
+  faceapi.detect(gotResults); // 持續偵測
 }
 
 function draw() {
-  background(0);
+  background(220);
   image(video, 0, 0, width, height);
-  drawGameUI();
 
-  // 簡單臉部互動（如果有偵測到臉）
-  if (detections && detections.length > 0) {
+  if (gameState === "start") {
+    drawQuestion();
+    detectFaceSelection();
+  } else if (gameState === "correct") {
     fill(0, 255, 0);
-    textSize(24);
-    text("你好！準備好了嗎？", 20, height - 40);
+    textSize(32);
+    textAlign(CENTER, CENTER);
+    text("正確！", width / 2, height / 2);
+    setTimeout(nextQuestion, 1500);
+  } else if (gameState === "wrong") {
+    fill(255, 0, 0);
+    textSize(32);
+    textAlign(CENTER, CENTER);
+    text("答錯囉！", width / 2, height / 2);
+    setTimeout(nextQuestion, 1500);
   }
 }
 
-function drawGameUI() {
+function drawQuestion() {
+  let q = questions[currentQuestion];
+
   fill(255);
-  rect(0, 0, width, 100);
+  rect(0, 0, width, 60);
   fill(0);
   textSize(20);
-  textAlign(LEFT, TOP);
+  textAlign(CENTER, CENTER);
+  text(q.question, width / 2, 30);
 
-  if (!gameStarted) {
-    text("按任意鍵開始問答遊戲", 20, 20);
-  } else {
-    text(`第 ${currentQuestion + 1} 題：${questions[currentQuestion].text}`, 20, 20);
-    text(`你的答案：${userInput}`, 20, 60);
+  for (let i = 0; i < q.options.length; i++) {
+    fill(255, 255, 0, 150);
+    rect(100, 100 + i * 100, 440, 60, 10);
+    fill(0);
+    textSize(18);
+    text(q.options[i], width / 2, 130 + i * 100);
   }
 }
 
-function keyPressed() {
-  if (!gameStarted) {
-    gameStarted = true;
-    return;
-  }
+function detectFaceSelection() {
+  if (detections.length > 0) {
+    let alignedRect = detections[0].alignedRect;
+    let { x, y, width: w, height: h } = alignedRect._box;
 
-  if (keyCode === ENTER) {
-    if (userInput === questions[currentQuestion].answer) {
-      currentQuestion++;
-      if (currentQuestion >= questions.length) {
-        gameStarted = false;
-        currentQuestion = 0;
-        userInput = "";
-        alert("恭喜你完成所有問題！");
-      } else {
-        userInput = "";
+    // 用臉中心點作為指標
+    let centerX = x + w / 2;
+    let centerY = y + h / 2;
+
+    fill(0, 255, 0);
+    ellipse(centerX, centerY, 20, 20); // 顯示臉部中點
+
+    // 判斷是否碰到選項
+    let q = questions[currentQuestion];
+    for (let i = 0; i < q.options.length; i++) {
+      let optionY = 100 + i * 100;
+      if (centerX > 100 && centerX < 540 && centerY > optionY && centerY < optionY + 60) {
+        if (q.options[i] === q.answer) {
+          gameState = "correct";
+        } else {
+          gameState = "wrong";
+        }
       }
-    } else {
-      alert("答錯了，再想想！");
     }
-  } else if (keyCode === BACKSPACE) {
-    userInput = userInput.slice(0, -1);
-  } else {
-    userInput += key;
   }
+}
+
+function nextQuestion() {
+  currentQuestion++;
+  if (currentQuestion >= questions.length) {
+    currentQuestion = 0;
+  }
+  gameState = "start";
 }
