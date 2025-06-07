@@ -12,31 +12,35 @@
       color: #fff;
       font-family: Arial, sans-serif;
       user-select: none;
+      text-align: center;
     }
     #defaultCanvas0 {
       display: block;
-      margin: 0 auto;
+      margin: 20px auto;
       border: 2px solid #555;
       border-radius: 8px;
-      margin-top: 20px;
       background: #000;
+    }
+    button {
+      font-size: 18px;
+      padding: 10px 20px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background-color: #4CAF50;
+      color: white;
+      margin-top: 10px;
     }
   </style>
 </head>
 <body>
-  <h1 style="text-align:center; margin-top: 15px;">教育科技學系互動遊戲</h1>
-  <p style="text-align:center; color: #ccc;">請點擊畫面上的「開始」按鈕開啟鏡頭並開始遊戲</p>
+  <h1>教育科技學系互動遊戲</h1>
+  <p style="color: #ccc;">請點擊下方「開始」按鈕開啟鏡頭並開始遊戲</p>
+  <button id="startBtn">開始</button>
 
   <!-- p5.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
-  <!-- tensorflow.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
-  <!-- handpose model -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
   <!-- ml5.js -->
-  <script src="https://cdn.jsdelivr.net/npm/ml5@latest/dist/ml5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ml5@0.12.2/dist/ml5.min.js"></script>
 
-  <!-- 你的 sketch.js -->
-  <script src="sketch.js"></script>
-</body>
-</html>
+  <script src="sketch.js"></scri
