@@ -1,6 +1,6 @@
 let video;
-let faceapi;
-let detections = [];
+let handpose;
+let predictions = [];
 
 let questions = [
   {
@@ -16,13 +16,10 @@ let questions = [
 ];
 
 let currentQuestion = 0;
-let gameState = "waiting"; // 新增狀態：等待開始
+let gameState = "waiting";
 
 function setup() {
   createCanvas(640, 480);
-  
-  // 開始時不立即啟動攝影機和faceapi
-  // 攝影機跟faceapi會在 startGame() 被呼叫時建立
 }
 
 function startGame() {
@@ -30,25 +27,16 @@ function startGame() {
   video.size(width, height);
   video.hide();
 
-  const faceOptions = { withLandmarks: true, withExpressions: false, withDescriptors: false };
-  faceapi = ml5.faceApi(video, faceOptions, modelReady);
+  handpose = ml5.handpose(video, modelReady);
+  handpose.on("predict", results => {
+    predictions = results;
+  });
 
   gameState = "start";
 }
 
 function modelReady() {
-  console.log("FaceAPI loaded!");
-  faceapi.detect(gotResults);
-}
-
-function gotResults(err, result) {
-  if (err) {
-    console.error(err);
-    return;
-  }
-
-  detections = result;
-  faceapi.detect(gotResults); // 持續偵測
+  console.log("Handpose model ready!");
 }
 
 function draw() {
@@ -57,35 +45,30 @@ function draw() {
   if (gameState === "waiting") {
     drawStartScreen();
   } else {
-    // 鏡像翻轉畫面：先平移寬度，再scale X軸 -1
     push();
     translate(width, 0);
     scale(-1, 1);
-
     image(video, 0, 0, width, height);
-
-    if (detections.length > 0) {
-      drawFaceBox();
-    }
     pop();
 
-    if (gameState === "start") {
-      drawQuestion();
-      detectFaceSelection();
-    } else if (gameState === "correct") {
+    drawQuestion();
+
+    if (predictions.length > 0) {
+      let hand = predictions[0];
+      // 手指尖座標：食指指尖是 landmarks[8]
+      let [x, y, z] = hand.landmarks[8];
+      
+      // 因為鏡像，我們要把x反轉
+      let flippedX = width - x;
+
       fill(0, 255, 0);
-      textSize(32);
-      textAlign(CENTER, CENTER);
-      text("正確！", width / 2, height / 2);
-      setTimeout(nextQuestion, 1500);
-    } else if (gameState === "wrong") {
-      fill(255, 0, 0);
-      textSize(32);
-      textAlign(CENTER, CENTER);
-      text("答錯囉！", width / 2, height / 2);
-      setTimeout(nextQuestion, 1500);
+      noStroke();
+      ellipse(flippedX, y, 20, 20);
+
+      detectHandSelection(flippedX, y);
     }
   }
+
 }
 
 function drawStartScreen() {
@@ -94,10 +77,9 @@ function drawStartScreen() {
   textSize(32);
   textAlign(CENTER, CENTER);
   text("點擊開始遊戲", width / 2, height / 2 - 50);
-  
-  // 畫按鈕
+
   fill(0, 200, 100);
-  rect(width/2 - 80, height/2, 160, 60, 20);
+  rect(width / 2 - 80, height / 2, 160, 60, 20);
   fill(255);
   textSize(24);
   text("開始", width / 2, height / 2 + 30);
@@ -105,8 +87,8 @@ function drawStartScreen() {
 
 function mousePressed() {
   if (gameState === "waiting") {
-    // 判斷滑鼠是否點擊到按鈕範圍
-    if (mouseX > width/2 - 80 && mouseX < width/2 + 80 && mouseY > height/2 && mouseY < height/2 + 60) {
+    if (mouseX > width / 2 - 80 && mouseX < width / 2 + 80 &&
+      mouseY > height / 2 && mouseY < height / 2 + 60) {
       startGame();
     }
   }
@@ -131,36 +113,28 @@ function drawQuestion() {
   }
 }
 
-function drawFaceBox() {
-  let alignedRect = detections[0].alignedRect;
-  let { x, y, width: w, height: h } = alignedRect._box;
+let selectionCooldown = false; // 避免短時間內多次判斷
 
-  // 因為鏡像畫面，X座標也要反轉
-  let centerX = width - (x + w / 2);
-  let centerY = y + h / 2;
+function detectHandSelection(x, y) {
+  if (selectionCooldown) return;
 
-  fill(0, 255, 0);
-  ellipse(centerX, centerY, 20, 20);
-}
+  let q = questions[currentQuestion];
+  for (let i = 0; i < q.options.length; i++) {
+    let optionY = 100 + i * 100;
+    if (x > 100 && x < 540 && y > optionY && y < optionY + 60) {
+      selectionCooldown = true;
 
-function detectFaceSelection() {
-  if (detections.length > 0) {
-    let alignedRect = detections[0].alignedRect;
-    let { x, y, width: w, height: h } = alignedRect._box;
-
-    let centerX = width - (x + w / 2); // 反轉X座標
-    let centerY = y + h / 2;
-
-    let q = questions[currentQuestion];
-    for (let i = 0; i < q.options.length; i++) {
-      let optionY = 100 + i * 100;
-      if (centerX > 100 && centerX < 540 && centerY > optionY && centerY < optionY + 60) {
-        if (q.options[i] === q.answer) {
-          gameState = "correct";
-        } else {
-          gameState = "wrong";
-        }
+      if (q.options[i] === q.answer) {
+        gameState = "correct";
+      } else {
+        gameState = "wrong";
       }
+
+      setTimeout(() => {
+        nextQuestion();
+        selectionCooldown = false;
+      }, 1500);
+      break;
     }
   }
 }
