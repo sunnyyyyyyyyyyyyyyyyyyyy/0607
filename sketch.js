@@ -78,19 +78,16 @@ function setupHandTracking() {
 function drawHand() {
   if (detections.length > 0) {
     let landmarks = detections[0];
-    let thumbTip = landmarks[4];
     let indexTip = landmarks[8];
 
-    let x1 = width - thumbTip.x * width;
-    let y1 = thumbTip.y * height;
-    let x2 = width - indexTip.x * width;
-    let y2 = indexTip.y * height;
+    let x = width - indexTip.x * width;
+    let y = indexTip.y * height;
 
-    stroke(0, 255, 0);
-    strokeWeight(4);
-    line(x1, y1, x2, y2);
+    fill(0, 255, 0);
+    noStroke();
+    ellipse(x, y, 20, 20);
 
-    return { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+    return { x, y };
   }
   return null;
 }
@@ -141,9 +138,9 @@ function drawBlocks() {
       block.y += 2;
 
       fill(200, 100, 100);
-      rect(block.x, block.y, 60, 40, 5);
+      rect(block.x, block.y, 60, 40, 10);
       fill(255);
-      textSize(18);
+      textSize(20);
       text(block.text, block.x, block.y);
 
       if (handPos && dist(handPos.x, handPos.y, block.x, block.y) < 40) {
